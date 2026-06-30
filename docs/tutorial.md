@@ -133,18 +133,103 @@ Depois, abra o Linphone manualmente.
 
 ### Passo 4 — Configurar o monitoramento (uma vez só)
 
-A configuração do Zabbix (web scenario, trigger, media type e action) já é criada automaticamente por um script via API:
+A configuração tem 5 partes: **web scenario → trigger → media type → mídia do usuário → action**. Você pode criar tudo automaticamente (forma rápida) ou na mão pelo painel (para entender cada peça). Escolha **uma** das duas.
+
+#### Forma rápida (script via API)
 
 ```bash
 python3 scripts/zbx_setup.py
 ```
 
-Ele cria, de forma idempotente (pode rodar de novo sem duplicar):
-- Web scenario **"Check site"** monitorando `http://website`
-- Trigger **"Site DOWN"**
-- Media type Webhook **"Asterisk Call"** (já habilitado)
-- A mídia do usuário Admin (envia para o ramal 1000)
-- A Action que liga os pontos
+Cria tudo de forma idempotente (pode rodar de novo sem duplicar): web scenario "Check site", trigger "Site DOWN", media type Webhook "Asterisk Call" (já habilitado), a mídia do Admin (ramal 1000) e a Action.
+
+#### Forma manual (pelo painel — passo a passo)
+
+Acesse **http://localhost:8081** e entre com `Admin` / `zabbix`. Faça as 5 etapas na ordem.
+
+**4.1 — Web scenario (o que monitora o site)**
+
+1. Menu **Data collection → Hosts**
+2. Na linha do host **"Zabbix server"**, clique na coluna **Web** (ou em *Web scenarios*)
+3. Botão **Create web scenario** (canto superior direito)
+4. Aba **Scenario**:
+   - *Name:* `Check site`
+   - *Update interval:* `30s`
+   - *Attempts:* `1`
+5. Aba **Steps** → botão **Add**:
+   - *Name:* `home`
+   - *URL:* `http://website` (ou a URL do site real que quer monitorar)
+   - *Required status codes:* `200`
+   - Clique em **Add** para salvar o passo
+6. Clique em **Add** para salvar o scenario
+
+> Isso cria automaticamente os itens de coleta, entre eles o `web.test.fail[Check site]` — que vale `0` quando o site responde e `1` quando falha.
+
+**4.2 — Trigger (quando considerar que caiu)**
+
+1. Ainda em **Data collection → Hosts**, na linha do "Zabbix server" clique em **Triggers**
+2. Botão **Create trigger**
+3. Preencha:
+   - *Name:* `Site DOWN: {HOST.NAME}`
+   - *Severity:* **High**
+   - *Expression:* clique em **Add** e monte, ou cole direto:
+
+```
+last(/Zabbix server/web.test.fail[Check site])<>0
+```
+
+   (lê-se: "se a última medição de falha for diferente de zero → problema")
+4. Clique em **Add**
+
+> Dica anti-flapping: para só alertar após 3 falhas seguidas, use
+> `min(/Zabbix server/web.test.fail[Check site],#3)<>0`.
+
+**4.3 — Media type Webhook (como a ligação é feita)**
+
+1. Menu **Alerts → Media types**
+2. Botão **Create media type**
+3. Aba **Media type**:
+   - *Name:* `Asterisk Call`
+   - *Type:* **Webhook**
+   - *Script:* cole o conteúdo do arquivo `scripts/zabbix_webhook.js`
+   - Em **Parameters**, adicione (botão Add em cada um):
+
+| Name | Value |
+|------|-------|
+| `ramal` | `{ALERT.SENDTO}` |
+| `event_value` | `{EVENT.VALUE}` |
+| `ari_url` | `http://asterisk:8088/ari/channels` |
+| `ari_user` | `zabbix` |
+| `ari_pass` | `ChangeMe_ARI_123` |
+
+4. **Enabled** marcado (importante! se ficar desmarcado, a ligação não sai)
+5. Clique em **Add**
+
+**4.4 — Mídia do usuário (para quem ligar)**
+
+1. Menu **Users → Users** → clique no usuário **Admin**
+2. Aba **Media** → botão **Add**:
+   - *Type:* `Asterisk Call`
+   - *Send to:* `1000` (o ramal que vai tocar)
+   - *When active:* `1-7,00:00-24:00`
+   - *Use if severity:* deixe todas marcadas
+3. **Add** e depois **Update**
+
+**4.5 — Action (liga a trigger à ligação)**
+
+1. Menu **Alerts → Actions → Trigger actions**
+2. Botão **Create action**
+3. Aba **Action**:
+   - *Name:* `Ligar quando site cair`
+   - Em **Conditions** → **Add**: *Type* = `Trigger`, e selecione `Site DOWN: Zabbix server`
+4. Aba **Operations**:
+   - Em **Operations** → **Add**:
+     - *Send to users:* `Admin`
+     - *Send only to:* `Asterisk Call`
+   - *Default operation step duration:* `1h` (evita religar em loop durante a queda)
+5. Clique em **Add**
+
+Pronto. A partir daqui, sempre que o site cair, o telefone toca sozinho.
 
 ---
 
@@ -217,7 +302,6 @@ docker compose down             # desligar tudo (config do Zabbix fica salva)
 | Linphone não registra | Transport errado (TLS) ou porta errada | Use Domain `127.0.0.1:5062` e Transport **UDP** |
 | Webhook falha: "Media type disabled" | Media type criado desabilitado | Já corrigido no `zbx_setup.py` (status habilitado) |
 | Sem áudio no Linphone | Dispositivo de saída errado | Ajuste o dispositivo de áudio nas configs do Linphone |
-| Abriu 2 janelas de chamada | Janelas antigas acumuladas | Feche e reabra o Linphone (`./start.sh`) |
 
 ### Verificar se o ramal está registrado e "vivo"
 
@@ -237,22 +321,6 @@ A parte mais delicada do projeto é a comunicação entre o **Linphone (no deskt
 2. **`start.sh`** reinicia o Linphone junto com a stack, garantindo um registro fresco e qualificado sempre que tudo sobe.
 
 Juntas, essas duas medidas eliminam o sintoma de "ligou mas a chamada não chega".
-
----
-
-## 10. Segurança — trocar antes de usar fora do laboratório
-
-Os valores abaixo são **padrão de laboratório** e devem ser alterados:
-
-| Onde | Valor atual | Trocar para |
-|------|-------------|-------------|
-| ARI (`ari.conf`) | `ChangeMe_ARI_123` | senha forte |
-| Ramal 1000 (`pjsip.conf`) | `ChangeMe_1000` | senha forte |
-| Zabbix Web | `Admin` / `zabbix` | trocar no 1º login |
-| MariaDB | `zabbix_pw` / `root_pw` | senhas fortes |
-| ARI (`ari.conf`) | `allowed_origins=*` | restringir a origem |
-
-Não exponha as portas **8088** (ARI), **5062** (SIP) e **8081** (web) diretamente na internet: o ARI sem proteção permite originar chamadas arbitrárias.
 
 ---
 
