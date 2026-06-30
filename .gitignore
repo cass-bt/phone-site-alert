@@ -1,0 +1,4 @@
+# runtime
+db_data/
+*.log
+.DS_Store

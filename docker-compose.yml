@@ -1,0 +1,94 @@
+services:
+  # ============================================================
+  # Banco do Zabbix
+  # ============================================================
+  db:
+    image: mariadb:10.11
+    container_name: ssa-db
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_bin
+    environment:
+      MYSQL_DATABASE: zabbix
+      MYSQL_USER: zabbix
+      MYSQL_PASSWORD: zabbix_pw
+      MYSQL_ROOT_PASSWORD: root_pw
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - ssa-net
+    restart: unless-stopped
+
+  # ============================================================
+  # Zabbix Server — roda os checks e dispara as actions.
+  # A pasta scripts/ é montada como alertscripts (Media type "Script").
+  # ============================================================
+  zabbix-server:
+    image: zabbix/zabbix-server-mysql:alpine-7.0-latest
+    container_name: ssa-zabbix-server
+    environment:
+      DB_SERVER_HOST: db
+      MYSQL_DATABASE: zabbix
+      MYSQL_USER: zabbix
+      MYSQL_PASSWORD: zabbix_pw
+      ZBX_STARTPOLLERS: "5"
+    ports:
+      - "10051:10051"          # tráfego de agentes/trappers
+    volumes:
+      - ./scripts:/usr/lib/zabbix/alertscripts:ro
+    depends_on:
+      - db
+    networks:
+      - ssa-net
+    restart: unless-stopped
+
+  # ============================================================
+  # Interface web do Zabbix (http://localhost:8081)
+  #   Login inicial:  Admin / zabbix
+  # ============================================================
+  zabbix-web:
+    image: zabbix/zabbix-web-nginx-mysql:alpine-7.0-latest
+    container_name: ssa-zabbix-web
+    environment:
+      DB_SERVER_HOST: db
+      MYSQL_DATABASE: zabbix
+      MYSQL_USER: zabbix
+      MYSQL_PASSWORD: zabbix_pw
+      ZBX_SERVER_HOST: zabbix-server
+      PHP_TZ: America/Sao_Paulo
+    ports:
+      - "8081:8080"
+    depends_on:
+      - db
+      - zabbix-server
+    networks:
+      - ssa-net
+    restart: unless-stopped
+
+  # ============================================================
+  # Asterisk PBX — origina a ligação e toca o áudio de alerta.
+  #   ARI/HTTP:   http://localhost:8088
+  #   SIP (UDP):  5060
+  # ============================================================
+  asterisk:
+    image: andrius/asterisk:latest
+    container_name: ssa-asterisk
+    ports:
+      - "5060:5060/udp"
+      - "10000-10010:10000-10010/udp"   # RTP (áudio)
+      - "8088:8088"                       # ARI / HTTP
+    volumes:
+      - ./asterisk_conf:/etc/asterisk
+      - ./sounds/custom:/var/lib/asterisk/sounds/custom
+      - ./shared:/shared
+    command: /usr/sbin/asterisk -f -vvvddd
+    networks:
+      - ssa-net
+    restart: unless-stopped
+
+networks:
+  ssa-net:
+    driver: bridge
+
+volumes:
+  db_data:
