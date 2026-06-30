@@ -74,7 +74,7 @@ services:
     image: andrius/asterisk:latest
     container_name: ssa-asterisk
     ports:
-      - "5060:5060/udp"
+      - "5062:5060/udp"                   # host 5062 -> evita conflito com o softphone local na 5060
       - "10000-10010:10000-10010/udp"   # RTP (áudio)
       - "8088:8088"                       # ARI / HTTP
     volumes:
@@ -82,6 +82,20 @@ services:
       - ./sounds/custom:/var/lib/asterisk/sounds/custom
       - ./shared:/shared
     command: /usr/sbin/asterisk -f -vvvddd
+    networks:
+      - ssa-net
+    restart: unless-stopped
+
+  # ============================================================
+  # Site de exemplo a ser monitorado pelo Zabbix.
+  # Para testar o alerta: `docker compose stop website` -> o
+  # Zabbix detecta o down e dispara a ligação.
+  # ============================================================
+  website:
+    image: nginx:alpine
+    container_name: ssa-website
+    ports:
+      - "8082:80"
     networks:
       - ssa-net
     restart: unless-stopped
