@@ -14,7 +14,7 @@ html_body = markdown.markdown(
 CSS = """
 @page {
   size: A4; margin: 2cm 1.8cm;
-  @bottom-center { content: "Smart Site Alert — " counter(page) " / " counter(pages);
+  @bottom-center { content: "Phone Site Alert  ·  " counter(page) " / " counter(pages);
                    font-size: 8pt; color: #888; }
 }
 * { box-sizing: border-box; }

@@ -1,11 +1,11 @@
-# Smart Site Alert
+# Phone Site Alert
 ## Monitoramento de site com alerta por ligação telefônica
 
 ---
 
 ## 1. O que é este serviço
 
-O Smart Site Alert é um laboratório self-hosted que fica de olho num site e, quando ele cai, liga automaticamente para um telefone tocando um aviso de voz. Roda tudo na sua própria máquina, em containers Docker, sem depender de nenhum serviço externo.
+O Phone Site Alert é um laboratório self-hosted que fica de olho num site e, quando ele cai, liga automaticamente para um telefone tocando um aviso de voz. Roda tudo na sua própria máquina, em containers Docker, sem depender de nenhum serviço externo.
 
 A ideia é simples:
 
@@ -95,7 +95,7 @@ O Asterisk recebe esse pedido e segue o dialplan (no `extensions.conf`): atende,
 ### Passo 1, entrar na pasta do projeto
 
 ```bash
-cd ~/smart-site-alert
+cd ~/phone-site-alert
 ```
 
 ### Passo 2, subir tudo (jeito recomendado)
@@ -288,7 +288,7 @@ Aqui você vê tudo acontecendo sem tocar em nada: o Zabbix percebe a queda, a A
 ## 7. Comandos do dia a dia
 
 ```bash
-cd ~/smart-site-alert
+cd ~/phone-site-alert
 
 ./start.sh                      # sobe tudo (containers + Linphone)
 docker compose ps               # ver status
@@ -331,4 +331,4 @@ Esses dois detalhes juntos resolvem aquele sintoma chato de "ligou mas a chamada
 
 ---
 
-*Smart Site Alert, laboratório de monitoramento com alerta por voz.*
+*Phone Site Alert, laboratório de monitoramento com alerta por voz.*

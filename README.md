@@ -1,4 +1,4 @@
-# 🚨 Smart Site Alert — Zabbix + Asterisk
+# 🚨 Phone Site Alert — Zabbix + Asterisk
 
 Monitora uma página web com **Zabbix** e, quando ela cai, **liga automaticamente**
 para um softphone (Linphone/Zoiper) via **Asterisk**, tocando um áudio de alerta
@@ -24,7 +24,7 @@ Cada um em `.ulaw`, `.gsm` e `.wav` (o Asterisk escolhe o melhor pro codec da ch
 ## 📁 Estrutura
 
 ```
-smart-site-alert/
+phone-site-alert/
 ├── docker-compose.yml        # zabbix-server + web + mariadb + asterisk
 ├── asterisk_conf/            # configs do Asterisk (PJSIP, ARI, dialplan)
 │   ├── pjsip.conf            #   ramal 1000 (softphone)

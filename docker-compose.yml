@@ -1,3 +1,5 @@
+name: phone-site-alert
+
 services:
   # ============================================================
   # Banco do Zabbix
