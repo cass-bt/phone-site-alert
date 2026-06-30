@@ -5,25 +5,25 @@
 
 ## 1. O que é este serviço
 
-O **Smart Site Alert** é um laboratório self-hosted que **monitora um site e, quando ele cai, liga automaticamente para um telefone (softphone) tocando um aviso de voz**. Tudo roda localmente, em containers Docker, sem depender de serviços externos.
+O Smart Site Alert é um laboratório self-hosted que fica de olho num site e, quando ele cai, liga automaticamente para um telefone tocando um aviso de voz. Roda tudo na sua própria máquina, em containers Docker, sem depender de nenhum serviço externo.
 
-A ideia central:
+A ideia é simples:
 
 ```
 O site parou de responder?  ->  o telefone toca e uma voz avisa.
 ```
 
-É útil para qualquer situação em que um e-mail ou notificação no celular passa despercebido, mas uma **ligação** chama a atenção na hora: queda de um servidor crítico, de uma API de produção, de um site institucional, etc.
+Serve para qualquer situação em que uma notificação no celular passa batido, mas uma ligação não deixa: a queda de um servidor importante, de uma API de produção, de um site que não pode ficar fora do ar.
 
-### Por que ligação e não e-mail?
+### Por que ligação e não e-mail
 
-E-mail e push se perdem no meio de centenas de notificações. Uma chamada telefônica força a atenção imediata — é difícil ignorar o telefone tocando. Por isso esse padrão é usado em monitoramento de infraestrutura crítica (NOC, plantão de TI, on-call).
+E-mail e push acabam no meio de um monte de outras notificações e ninguém vê na hora. Já o telefone tocando é difícil de ignorar. É por isso que esse tipo de alerta por voz é comum em plantão de TI e times de on-call: quando algo crítico cai, alguém precisa saber na hora, não daqui a duas horas.
 
 ---
 
 ## 2. Como funciona (arquitetura)
 
-O serviço encadeia quatro peças, cada uma com uma única responsabilidade:
+O serviço junta quatro peças, e cada uma faz só uma coisa:
 
 ```
   [ nginx ]        [ Zabbix ]            [ Asterisk ]        [ Linphone ]
@@ -35,38 +35,38 @@ O serviço encadeia quatro peças, cada uma com uma única responsabilidade:
                    dispara a Action ----------+
 ```
 
-**Fluxo completo, passo a passo:**
+O caminho completo, passo a passo:
 
-1. O **Zabbix** consulta o site (via *Web scenario*) a cada 30 segundos, esperando um HTTP 200.
-2. Se o site não responde, o item `web.test.fail` vira `1` e a **trigger "Site DOWN"** entra em estado de problema.
-3. A **Action** do Zabbix reage ao problema e chama um **Media type Webhook**.
-4. O webhook faz uma requisição HTTP para a **API do Asterisk (ARI)**, pedindo para originar uma chamada.
-5. O **Asterisk** liga para o ramal **1000** e, quando atendido, toca o áudio de alerta gravado.
-6. O **Linphone** (softphone registrado no ramal 1000) toca no fone de ouvido. Você atende e ouve a voz.
+1. O Zabbix consulta o site a cada 30 segundos e espera um HTTP 200.
+2. Se o site não responde, o item `web.test.fail` vira `1` e a trigger "Site DOWN" entra em estado de problema.
+3. A Action do Zabbix reage a esse problema e chama um Media type do tipo Webhook.
+4. O webhook faz uma requisição para a API do Asterisk (a ARI) pedindo para originar uma chamada.
+5. O Asterisk liga para o ramal 1000 e, quando alguém atende, toca o áudio de alerta que já está gravado.
+6. O Linphone, que é o softphone registrado nesse ramal, toca no fone. Você atende e ouve o aviso.
 
 ### As peças (containers Docker)
 
 | Container | Imagem | Função |
 |-----------|--------|--------|
 | `ssa-db` | mariadb | Banco de dados do Zabbix |
-| `ssa-zabbix-server` | zabbix-server | O "cérebro": roda os checks e dispara as ações |
+| `ssa-zabbix-server` | zabbix-server | O cérebro: roda os checks e dispara as ações |
 | `ssa-zabbix-web` | zabbix-web-nginx | Interface web de configuração (porta 8081) |
-| `ssa-asterisk` | andrius/asterisk | Central telefônica (PBX) que faz a ligação |
-| `ssa-website` | nginx | Site de exemplo, para você testar derrubando-o |
+| `ssa-asterisk` | andrius/asterisk | Central telefônica que faz a ligação |
+| `ssa-website` | nginx | Site de exemplo, para você testar derrubando ele |
 
-O **Linphone** roda no desktop (fora do Docker), como o telefone que recebe a chamada.
+O Linphone roda no desktop, fora do Docker. Ele é o telefone que recebe a chamada.
 
-### Conceitos do Zabbix que valem entender
+### Os conceitos do Zabbix
 
-O Zabbix trabalha em três níveis encadeados:
+O Zabbix trabalha em três níveis, um puxando o outro:
 
-- **Item** — *o que medir.* Aqui: `web.test.fail` (0 = site OK, diferente de 0 = falhou).
-- **Trigger** — *quando isso é problema.* Aqui: `last(web.test.fail) <> 0`.
-- **Action** — *o que fazer.* Aqui: chamar o webhook que liga para o telefone.
+- **Item**: o que medir. Aqui é o `web.test.fail`, que vale 0 quando o site está OK e 1 quando falhou.
+- **Trigger**: quando isso vira problema. Aqui é `last(web.test.fail) <> 0`.
+- **Action**: o que fazer quando vira problema. Aqui é chamar o webhook que liga para o telefone.
 
-### Como o Zabbix fala com o Asterisk: a ARI
+### Como o Zabbix conversa com o Asterisk
 
-A **ARI** (*Asterisk REST Interface*) é uma API HTTP do Asterisk (porta 8088). O webhook do Zabbix faz um `POST` pedindo a ligação:
+A ARI (Asterisk REST Interface) é uma API HTTP do Asterisk, na porta 8088. O webhook do Zabbix faz um POST pedindo a ligação, mais ou menos assim:
 
 ```json
 {
@@ -77,122 +77,128 @@ A **ARI** (*Asterisk REST Interface*) é uma API HTTP do Asterisk (porta 8088). 
 }
 ```
 
-O Asterisk então segue o *dialplan* (`extensions.conf`): atende, toca o áudio (`Playback`) e desliga.
+O Asterisk recebe esse pedido e segue o dialplan (no `extensions.conf`): atende, toca o áudio com o Playback e desliga.
 
 ---
 
 ## 3. Pré-requisitos
 
-- **Docker** e **Docker Compose** (v2+) instalados
-- Mínimo de **2 GB de RAM** livres
-- Um **softphone** (Linphone) instalado no desktop
-- Sistema Linux (testado em Kali)
+- Docker e Docker Compose (v2 ou mais novo) instalados
+- Pelo menos 2 GB de RAM livres
+- Um softphone (o Linphone) instalado no desktop
+- Linux (foi testado no Kali)
 
 ---
 
 ## 4. Como subir o serviço
 
-### Passo 1 — Clonar / entrar na pasta do projeto
+### Passo 1, entrar na pasta do projeto
 
 ```bash
 cd ~/smart-site-alert
 ```
 
-### Passo 2 — Subir tudo (forma recomendada)
+### Passo 2, subir tudo (jeito recomendado)
 
-Use o script que sobe a stack **e** prepara o softphone de uma vez:
+Use o script que sobe a stack e ainda prepara o softphone numa tacada só:
 
 ```bash
 ./start.sh
 ```
 
-Esse script:
+Esse script faz três coisas:
+
 1. Sobe todos os containers (`docker compose up -d`)
 2. Espera o Asterisk ficar saudável
 3. Reinicia o Linphone limpo, forçando um registro novo do ramal 1000
 
-> **Por que reiniciar o Linphone junto?** O Asterisk roda em container, atrás do NAT do Docker. Quando os containers reiniciam, o registro SIP "morre" e o Linphone (que usa UDP) só re-registraria cerca de 1 hora depois. Reabrir o Linphone força o registro na hora.
+O motivo de reiniciar o Linphone junto: o Asterisk roda em container, atrás do NAT do Docker. Quando os containers reiniciam, o registro do telefone "morre" e o Linphone, que usa UDP, só ia se registrar de novo umas horas depois. Reabrir ele força o registro na hora.
 
-### Passo 2 (alternativa) — Subir manualmente
+### Passo 2 (jeito manual)
+
+Se preferir subir na mão:
 
 ```bash
 docker compose up -d        # sobe os containers
-docker compose ps           # confere se estão "Up"/"healthy"
+docker compose ps           # confere se estão "Up" e "healthy"
 ```
 
-Depois, abra o Linphone manualmente.
+Depois é só abrir o Linphone.
 
-### Passo 3 — Acessos
+### Passo 3, acessos
 
 | Serviço | Endereço | Credenciais |
 |---------|----------|-------------|
 | Zabbix (web) | http://localhost:8081 | `Admin` / `zabbix` |
 | Asterisk (ARI) | http://localhost:8088/ari | `zabbix` / `ChangeMe_ARI_123` |
-| Site de exemplo | http://localhost:8082 | — |
+| Site de exemplo | http://localhost:8082 | (sem login) |
 | Ramal SIP | `127.0.0.1:5062` (UDP) | `1000` / `ChangeMe_1000` |
 
-### Passo 4 — Configurar o monitoramento (uma vez só)
+### Passo 4, configurar o monitoramento (uma vez só)
 
-A configuração tem 5 partes: **web scenario → trigger → media type → mídia do usuário → action**. Você pode criar tudo automaticamente (forma rápida) ou na mão pelo painel (para entender cada peça). Escolha **uma** das duas.
+A configuração tem cinco partes, nesta ordem: web scenario, trigger, media type, mídia do usuário e action. Dá para criar tudo automático (rápido) ou na mão pelo painel (bom para entender cada peça). Faça só um dos dois.
 
-#### Forma rápida (script via API)
+#### Jeito rápido (script via API)
 
 ```bash
 python3 scripts/zbx_setup.py
 ```
 
-Cria tudo de forma idempotente (pode rodar de novo sem duplicar): web scenario "Check site", trigger "Site DOWN", media type Webhook "Asterisk Call" (já habilitado), a mídia do Admin (ramal 1000) e a Action.
+Cria tudo de uma vez, e pode rodar de novo sem duplicar nada: o web scenario "Check site", a trigger "Site DOWN", o media type Webhook "Asterisk Call" (já habilitado), a mídia do Admin (apontando para o ramal 1000) e a Action.
 
-#### Forma manual (pelo painel — passo a passo)
+#### Jeito manual (pelo painel, passo a passo)
 
-Acesse **http://localhost:8081** e entre com `Admin` / `zabbix`. Faça as 5 etapas na ordem.
+Abra o **http://localhost:8081** e entre com `Admin` / `zabbix`. Faça as cinco etapas na ordem.
 
-**4.1 — Web scenario (o que monitora o site)**
+**4.1, web scenario (o que monitora o site)**
 
-1. Menu **Data collection → Hosts**
-2. Na linha do host **"Zabbix server"**, clique na coluna **Web** (ou em *Web scenarios*)
-3. Botão **Create web scenario** (canto superior direito)
-4. Aba **Scenario**:
+1. Vá em **Data collection > Hosts**
+2. Na linha do host "Zabbix server", clique na coluna **Web** (ou em *Web scenarios*)
+3. Clique em **Create web scenario** (canto superior direito)
+4. Na aba **Scenario**, preencha:
    - *Name:* `Check site`
    - *Update interval:* `30s`
    - *Attempts:* `1`
-5. Aba **Steps** → botão **Add**:
+5. Na aba **Steps**, clique em **Add** e preencha:
    - *Name:* `home`
-   - *URL:* `http://website` (ou a URL do site real que quer monitorar)
+   - *URL:* `http://website` (ou a URL do site real que você quer monitorar)
    - *Required status codes:* `200`
    - Clique em **Add** para salvar o passo
 6. Clique em **Add** para salvar o scenario
 
-> Isso cria automaticamente os itens de coleta, entre eles o `web.test.fail[Check site]` — que vale `0` quando o site responde e `1` quando falha.
+Isso já cria sozinho os itens de coleta, e entre eles está o `web.test.fail[Check site]`, que vale 0 quando o site responde e 1 quando ele falha.
 
-**4.2 — Trigger (quando considerar que caiu)**
+**4.2, trigger (quando considerar que caiu)**
 
-1. Ainda em **Data collection → Hosts**, na linha do "Zabbix server" clique em **Triggers**
-2. Botão **Create trigger**
+1. Ainda em **Data collection > Hosts**, na linha do "Zabbix server", clique em **Triggers**
+2. Clique em **Create trigger**
 3. Preencha:
    - *Name:* `Site DOWN: {HOST.NAME}`
    - *Severity:* **High**
-   - *Expression:* clique em **Add** e monte, ou cole direto:
+   - *Expression:* clique em **Add** para montar pela tela, ou cole direto isto:
 
 ```
 last(/Zabbix server/web.test.fail[Check site])<>0
 ```
 
-   (lê-se: "se a última medição de falha for diferente de zero → problema")
+   Em português: se a última medição de falha for diferente de zero, é problema.
 4. Clique em **Add**
 
-> Dica anti-flapping: para só alertar após 3 falhas seguidas, use
-> `min(/Zabbix server/web.test.fail[Check site],#3)<>0`.
+Se o site oscilar muito e você não quiser ligação a cada piscada, troque a expressão para exigir três falhas seguidas:
 
-**4.3 — Media type Webhook (como a ligação é feita)**
+```
+min(/Zabbix server/web.test.fail[Check site],#3)<>0
+```
 
-1. Menu **Alerts → Media types**
-2. Botão **Create media type**
-3. Aba **Media type**:
+**4.3, media type Webhook (como a ligação é feita)**
+
+1. Vá em **Alerts > Media types**
+2. Clique em **Create media type**
+3. Na aba **Media type**:
    - *Name:* `Asterisk Call`
    - *Type:* **Webhook**
    - *Script:* cole o conteúdo do arquivo `scripts/zabbix_webhook.js`
-   - Em **Parameters**, adicione (botão Add em cada um):
+   - Em **Parameters**, adicione um por um (botão Add):
 
 | Name | Value |
 |------|-------|
@@ -202,43 +208,43 @@ last(/Zabbix server/web.test.fail[Check site])<>0
 | `ari_user` | `zabbix` |
 | `ari_pass` | `ChangeMe_ARI_123` |
 
-4. **Enabled** marcado (importante! se ficar desmarcado, a ligação não sai)
+4. Deixe **Enabled** marcado. Esse é o detalhe que mais escapa: se ficar desmarcado, a ligação simplesmente não sai.
 5. Clique em **Add**
 
-**4.4 — Mídia do usuário (para quem ligar)**
+**4.4, mídia do usuário (para quem ligar)**
 
-1. Menu **Users → Users** → clique no usuário **Admin**
-2. Aba **Media** → botão **Add**:
+1. Vá em **Users > Users** e clique no usuário **Admin**
+2. Na aba **Media**, clique em **Add**:
    - *Type:* `Asterisk Call`
    - *Send to:* `1000` (o ramal que vai tocar)
    - *When active:* `1-7,00:00-24:00`
    - *Use if severity:* deixe todas marcadas
-3. **Add** e depois **Update**
+3. Clique em **Add** e depois em **Update**
 
-**4.5 — Action (liga a trigger à ligação)**
+**4.5, action (o que junta a trigger com a ligação)**
 
-1. Menu **Alerts → Actions → Trigger actions**
-2. Botão **Create action**
-3. Aba **Action**:
+1. Vá em **Alerts > Actions > Trigger actions**
+2. Clique em **Create action**
+3. Na aba **Action**:
    - *Name:* `Ligar quando site cair`
-   - Em **Conditions** → **Add**: *Type* = `Trigger`, e selecione `Site DOWN: Zabbix server`
-4. Aba **Operations**:
-   - Em **Operations** → **Add**:
+   - Em **Conditions**, clique em **Add**, escolha *Type* = `Trigger` e selecione `Site DOWN: Zabbix server`
+4. Na aba **Operations**:
+   - Em **Operations**, clique em **Add**:
      - *Send to users:* `Admin`
      - *Send only to:* `Asterisk Call`
-   - *Default operation step duration:* `1h` (evita religar em loop durante a queda)
+   - *Default operation step duration:* `1h` (assim ele não fica religando em loop enquanto o site está fora)
 5. Clique em **Add**
 
-Pronto. A partir daqui, sempre que o site cair, o telefone toca sozinho.
+Feito isso, toda vez que o site cair o telefone toca sozinho.
 
 ---
 
 ## 5. Configurar o softphone (Linphone)
 
-Na primeira vez, registre a conta SIP no Linphone:
+Na primeira vez você precisa registrar a conta SIP no Linphone:
 
-1. Na tela inicial, escolha **"Third-party SIP account"** (não "Create account")
-2. Clique em **"I understand"**
+1. Na tela inicial, escolha **Third-party SIP account** (não é "Create account")
+2. Clique em **I understand**
 3. Preencha:
 
 | Campo | Valor |
@@ -248,9 +254,9 @@ Na primeira vez, registre a conta SIP no Linphone:
 | Domain | `127.0.0.1:5062` |
 | Transport | **UDP** |
 
-4. Clique em **Connection**. O status deve ficar verde (registrado).
+4. Clique em **Connection**. O status fica verde quando registra.
 
-> **Atenção ao Transport:** tem que ser **UDP**. O padrão do Linphone é TLS, que não funciona com este Asterisk.
+Cuidado com o Transport: tem que ser UDP. O Linphone vem com TLS por padrão, e com TLS não funciona neste Asterisk.
 
 ---
 
@@ -258,24 +264,24 @@ Na primeira vez, registre a conta SIP no Linphone:
 
 Com tudo no ar e o ramal 1000 registrado:
 
-### Teste rápido (sem Zabbix)
+### Teste rápido (sem o Zabbix)
 
 ```bash
 ./scripts/test_call.sh          # liga e toca "site fora do ar"
 ./scripts/test_call.sh recovery # liga e toca "serviço restabelecido"
 ```
 
-O Linphone toca. Atenda e ouça a voz.
+O Linphone toca, você atende e ouve a voz.
 
-### Teste completo (cadeia automática)
+### Teste completo (a cadeia automática)
 
 ```bash
-docker compose stop website     # derruba o site -> liga em ~30s
+docker compose stop website     # derruba o site, liga em uns 30s
 # ... o telefone toca sozinho ...
 docker compose start website    # restaura o site
 ```
 
-Você verá: o Zabbix detecta a queda, a Action dispara, o Asterisk liga e o Linphone toca — tudo automático.
+Aqui você vê tudo acontecendo sem tocar em nada: o Zabbix percebe a queda, a Action dispara, o Asterisk liga e o Linphone toca.
 
 ---
 
@@ -289,7 +295,7 @@ docker compose ps               # ver status
 docker compose logs -f asterisk # logs do Asterisk em tempo real
 docker compose stop website     # simular queda
 docker compose start website    # restaurar
-docker compose down             # desligar tudo (config do Zabbix fica salva)
+docker compose down             # desligar tudo (a config do Zabbix fica salva)
 ```
 
 ---
@@ -298,30 +304,31 @@ docker compose down             # desligar tudo (config do Zabbix fica salva)
 
 | Problema | Causa provável | Solução |
 |----------|----------------|---------|
-| Liga, mas não chega no Linphone | Registro SIP "morto" após restart (NAT do Docker) | Rode `./start.sh` (reinicia o Linphone e re-registra) |
-| Linphone não registra | Transport errado (TLS) ou porta errada | Use Domain `127.0.0.1:5062` e Transport **UDP** |
-| Webhook falha: "Media type disabled" | Media type criado desabilitado | Já corrigido no `zbx_setup.py` (status habilitado) |
-| Sem áudio no Linphone | Dispositivo de saída errado | Ajuste o dispositivo de áudio nas configs do Linphone |
+| Liga, mas não chega no Linphone | Registro SIP morreu depois de um restart (NAT do Docker) | Rode `./start.sh`, que reinicia o Linphone e registra de novo |
+| Linphone não registra | Transport errado (TLS) ou porta errada | Use Domain `127.0.0.1:5062` e Transport UDP |
+| Webhook falha com "Media type disabled" | Media type ficou desabilitado | Já vem corrigido no `zbx_setup.py` (criado habilitado) |
+| Sem áudio no Linphone | Dispositivo de saída errado | Ajuste o dispositivo de áudio nas configurações do Linphone |
 
-### Verificar se o ramal está registrado e "vivo"
+Para ver se o ramal está registrado e respondendo:
 
 ```bash
 docker exec ssa-asterisk asterisk -rx "pjsip show contacts"
 ```
 
-O status deve ser **Avail** (qualificado). Se aparecer `Unavail` ou nada, rode `./start.sh`.
+O status tem que ser **Avail**. Se aparecer `Unavail` ou não aparecer nada, rode `./start.sh`.
 
 ---
 
 ## 9. Detalhe técnico: o NAT do Docker
 
-A parte mais delicada do projeto é a comunicação entre o **Linphone (no desktop)** e o **Asterisk (em container)**, que passa pelo **NAT do Docker**. Dois cuidados foram aplicados:
+A parte mais sensível do projeto é a conversa entre o Linphone, que está no desktop, e o Asterisk, que está num container. Esse tráfego passa pelo NAT do Docker, e isso exige dois cuidados:
 
-1. **`qualify_frequency=30`** no Asterisk (`pjsip.conf`): o Asterisk envia um "ping" (OPTIONS) ao ramal a cada 30s. Isso mantém o caminho NAT vivo (senão ele expira por inatividade) e detecta quando o ramal cai.
-2. **`start.sh`** reinicia o Linphone junto com a stack, garantindo um registro fresco e qualificado sempre que tudo sobe.
+O primeiro é o `qualify_frequency=30` no `pjsip.conf` do Asterisk. Com ele, o Asterisk manda um ping (um OPTIONS) para o ramal a cada 30 segundos. Isso mantém o caminho do NAT vivo, porque senão ele expira por inatividade, e de quebra o Asterisk percebe na hora quando o ramal sai do ar.
 
-Juntas, essas duas medidas eliminam o sintoma de "ligou mas a chamada não chega".
+O segundo é o `start.sh`, que reinicia o Linphone junto com a stack. Assim o registro do ramal sempre nasce novo e qualificado quando tudo sobe.
+
+Esses dois detalhes juntos resolvem aquele sintoma chato de "ligou mas a chamada não chega".
 
 ---
 
-*Smart Site Alert — laboratório de monitoramento com alerta por voz.*
+*Smart Site Alert, laboratório de monitoramento com alerta por voz.*
