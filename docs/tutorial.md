@@ -331,4 +331,32 @@ Esses dois detalhes juntos resolvem aquele sintoma chato de "ligou mas a chamada
 
 ---
 
+## 10. Compatibilidade (Ubuntu, Debian e outras distros)
+
+A maior parte do projeto roda em Docker, então é quase agnóstico de distro. Toda a stack (Zabbix, Asterisk, nginx e mariadb) sobe em container e funciona igual em Ubuntu, Debian, Fedora, Arch ou qualquer Linux que tenha Docker Engine e Docker Compose v2. O projeto foi montado no Kali, que é Debian por baixo, então Ubuntu e Debian são os casos mais parecidos e rodam sem ajuste nenhum na stack.
+
+O que muda de uma distro para outra são só as partes que rodam no host, fora do Docker.
+
+**O softphone (Linphone).** É um AppImage e roda em qualquer distro, mas precisa do FUSE2. No Debian e Ubuntu mais antigos o pacote é `libfuse2`; no Ubuntu 24.04 em diante ele virou `libfuse2t64`.
+
+```bash
+sudo apt install libfuse2     # ou libfuse2t64 no Ubuntu 24.04+
+```
+
+**A geração dos áudios.** Só importa se você quiser regerar as vozes, porque os áudios já vêm prontos no repositório. Se quiser mexer, no Ubuntu e Debian:
+
+```bash
+sudo apt install espeak-ng mbrola mbrola-br4 sox libsox-fmt-all
+```
+
+No Ubuntu, o `mbrola-br4` está no repositório `universe`, então pode ser preciso habilitar ele antes.
+
+**O `start.sh`.** Usa `bash`, `pkill`, `nohup`, `ss` e `docker`, que são padrão em Ubuntu e Debian. Roda sem ajuste.
+
+### Usando como servidor, sem desktop
+
+Se a ideia for usar de verdade e não como laboratório no desktop, o telefone que recebe a ligação nem precisa estar na mesma máquina. Pode ser um app no celular (Linphone ou Zoiper), outra máquina na rede ou um ramal físico SIP. Nesse cenário some toda a parte de FUSE, áudio e interface gráfica, e sobra só a stack Docker, que roda num Ubuntu Server ou Debian sem tela tranquilamente.
+
+---
+
 *Phone Site Alert, laboratório de monitoramento com alerta por voz.*
